@@ -30,14 +30,20 @@ echo "DKMS source: $DKMS_SRC"
 echo "Patch: $PATCH"
 echo ""
 
-# Check if already applied
-TARGET="$DKMS_SRC/src/tuxedo_compatibility_check/tuxedo_compatibility_check.c"
-if grep -q "return true;" "$TARGET" && ! grep -q "dmi_check_system" "$TARGET"; then
+# NOTE: the TUXEDO RPM lays DKMS sources out flat (no src/ level).
+# Verified layout: /usr/src/tuxedo-drivers-X/tuxedo_compatibility_check.c
+TARGET="$DKMS_SRC/tuxedo_compatibility_check/tuxedo_compatibility_check.c"
+if [ ! -f "$TARGET" ]; then
+  echo "Error: target not found: $TARGET"
+  echo "Check the DKMS source layout under $DKMS_SRC and update TARGET."
+  exit 1
+fi
+if grep -q "DMI bypass" "$TARGET"; then
   echo "Patch appears to already be applied. Skipping."
   echo "  ($TARGET)"
   echo ""
   echo "To force reapply, revert the file first:"
-  echo "  cd $DKMS_SRC && git checkout -- src/tuxedo_compatibility_check/tuxedo_compatibility_check.c"
+  echo "  cp $TARGET.bak $TARGET   (if you kept a backup)"
   exit 0
 fi
 
@@ -52,23 +58,36 @@ if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
   exit 1
 fi
 
-# Apply the patch
+# Apply the patch. The .patch uses a/ b/ prefixes with a src/ level
+# (repo layout), so strip 2 components to match the flat RPM layout.
 echo "Applying patch..."
-if patch -d "$DKMS_SRC" -p1 < "$PATCH"; then
+if patch -d "$DKMS_SRC" -p2 < "$PATCH"; then
   echo "Patch applied successfully."
 else
-  echo "Patch failed. Trying manual fallback..."
-  # Manual fallback: copy the original + redirect if patch format differs
+  echo "Patch failed. Trying fallback (insert early return)..."
+  # Fallback: insert "return true;" as the first statement of
+  # tuxedo_is_compatible() via python3.
   if [ -f "$TARGET" ]; then
-    sed -i 's/if (dmi_check_system.*$/return true;/' "$TARGET"
-    sed -i '/|| (x86_match_cpu.*/,/^[[:space:]]*return false;/{s/.*//;d}' "$TARGET"
-    # Simplify: just replace the function body
-    echo "Manual patch attempted. Verifying..."
+    python3 - "$TARGET" <<'EOF'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "bool tuxedo_is_compatible(void) {"
+assert s.count(old) == 1, "pattern not found exactly once"
+marker = "\n\treturn true; /* DMI bypass for non-TUXEDO hardware */"
+if "DMI bypass" not in s:
+    s = s.replace(old, old + marker, 1)
+    open(p, "w").write(s)
+    print("Fallback patch applied.")
+else:
+    print("Marker already present, nothing to do.")
+EOF
   fi
 fi
 
-# Verify
-if grep -q "return true;" "$TARGET" && ! grep -q "dmi_check_system" "$TARGET"; then
+# Verify (marker comment, not just "return true;" — the original
+# function legitimately contains "return true;" inside its if body)
+if grep -q "DMI bypass" "$TARGET"; then
   echo "Verification: patch applied correctly."
 else
   echo "Warning: patch verification failed. Check $TARGET manually."
