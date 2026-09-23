@@ -1,15 +1,14 @@
 # acer-rgb
 
-Keyboard backlight enablement for Acer Aspire A715-79G (and similar) using
-TUXEDO Computers kernel drivers with a DMI bypass patch.
+Keyboard backlight enablement for Acer Aspire A715-79G (and similar)
+using a self-owned kernel driver — no external driver packages required.
 
 ## What it does
 
-- Loads `clevo_wmi` + `tuxedo_keyboard` kernel modules at boot (patched to
-  bypass DMI hardware check)
+- Loads the `acer_kbd_backlight` kernel module at boot (DKMS, `driver/`)
 - Creates `/sys/class/leds/rgb:kbd_backlight/` LED class device
 - Runs `kbd-rgbd` — a minimal Rust daemon that animates RGB colors via sysfs
-- Provides 16 preset color profiles and shell scripts to control them
+- Provides 11 preset color profiles and shell scripts to control them
 - No D-Bus, no KDE dependencies, no Python
 
 ## Architecture
@@ -21,7 +20,7 @@ TUXEDO Computers kernel drivers with a DMI bypass patch.
 │                  kbd-off                         │
 │                  kbd-brightness-up/down          │
 └───────┬─────────────────────────────┬────────────┘
-        │ write /run/kbd-rgbd/cmd      │ write sysfs
+        │ write /run/kbd-rgbd/cmd      │ write /run/kbd-rgbd/cmd
         ▼                              ▼
 ┌────────────────┐           ┌──────────────────┐
 │   kbd-rgbd     │  reads    │  multi_intensity │
@@ -45,13 +44,10 @@ TUXEDO Computers kernel drivers with a DMI bypass patch.
 # 1. Build and install system-wide
 sudo ./scripts/install-system.sh
 
-# 2. Apply DMI bypass patch (kernel modification — opt in)
-sudo ./scripts/apply-dmi-patch.sh
+# 2. Validate the stack
+sudo ./scripts/validate-driver.sh
 
-# 3. Load modules
-sudo modprobe clevo_wmi
-
-# 4. Use it
+# 3. Use it
 kbd-preset-list
 kbd-preset-switch
 kbd-brightness-up
@@ -89,6 +85,7 @@ bind = $mod+KB, KB, exec, kbd-preset-switch
 |------|-------------|
 | `rainbow` | 6-color smooth rainbow, 4s per transition |
 | `cycle` | Red → Green → Blue, 6s each |
+| `default` | Red → Green → Blue, 6s each (active at install) |
 | `warm-ambient` | Slow warm-tone fades, 15s each |
 | `pastel` | Soft pastels, 5s each |
 | `ocean` | Blue and teal tones, 6s each |
@@ -107,13 +104,22 @@ bind = $mod+KB, KB, exec, kbd-preset-switch
 │   ├── error.rs                ← KbdError enum + From impls
 │   ├── types.rs                ← JSON types + parsers + 8 tests
 │   ├── animation.rs            ← lerp() + build_frames() + 2 tests
-│   └── runtime.rs              ← daemon runtime + 1 test
+│   └── runtime.rs              ← daemon runtime + 3 tests
 ├── tests/
 │   └── profile_loading.rs      ← 2 integration tests
-├── .github/workflows/ci.yml     ← CI: fmt, clippy, test, build --release
+├── .github/workflows/ci.yml     ← CI: fmt, clippy, test, shellcheck, build
 ├── Cargo.toml
-├── presets/keyboard/           ← animation JSON definitions
-├── presets/profiles/           ← profile selectors
+├── driver/                     ← acer_kbd_backlight kernel module (DKMS)
+│   ├── acer_kbd.h              ← GUIDs, commands, shared structs
+│   ├── acer_kbd_core.c         ← init, Acer DMI gate, platform/input
+│   ├── acer_kbd_wmi.c          ← WMI transport + probe
+│   ├── acer_kbd_clevo.c        ← backlight modes, keymap, events
+│   ├── acer_kbd_led.c          ← LED devices, detection, suspend/resume
+│   ├── Kbuild + Makefile       ← kbuild files
+│   ├── dkms.conf               ← DKMS package definition
+│   └── README.md               ← driver design + safety case
+├── presets/keyboard/           ← animation JSON definitions (11)
+├── presets/profiles/           ← profile selectors (11)
 ├── packaging/
 │   ├── kbd-rgbd.service        ← systemd service unit
 │   ├── modules-load.d/         ← kernel module auto-load
@@ -124,21 +130,19 @@ bind = $mod+KB, KB, exec, kbd-preset-switch
 │   ├── kbd-preset-switch       ← cycle to next preset
 │   ├── kbd-preset-list         ← list presets
 │   ├── kbd-off                 ← turn off (daemon stays alive)
-│   ├── install-system.sh       ← system installation
-│   ├── uninstall.sh            ← system removal
-│   └── apply-dmi-patch.sh      ← DKMS patch application
-├── patches/                    ← DMI bypass patch
+│   ├── install-system.sh       ← system installation (incl. DKMS driver)
+│   ├── uninstall.sh            ← system removal (incl. DKMS driver)
+│   └── validate-driver.sh      ← driver/stack health checks (needs root)
 └── docs/
-    ├── investigation.md        ← full debugging story
     └── architecture.md         ← configuration reference
 ```
 
 ## Requirements
 
 - Linux with systemd v240+ (for `RuntimeDirectory=` support)
-- `tuxedo-drivers` package from the official TUXEDO repository
+- Kernel headers + compiler + DKMS (`sudo dnf install kernel-devel dkms gcc make`)
 - Rust toolchain (for building `kbd-rgbd`)
-- DKMS patches rebuild after kernel updates
+- DKMS `AUTOINSTALL` rebuilds the driver on kernel updates
 
 ## Daemon commands
 
@@ -158,12 +162,9 @@ Write to `/run/kbd-rgbd/cmd` (newline-terminated):
 sudo ./scripts/uninstall.sh
 ```
 
-To revert the DMI patch:
-
-```bash
-sudo dnf reinstall tuxedo-drivers
-```
-
 ## License
 
-GPL-2.0 (matches tuxedo-drivers license)
+GPL-2.0-or-later. The kernel driver in `driver/` is derived from
+tuxedo-drivers (TUXEDO Computers GmbH, GPL-2.0+); attributions are kept
+in the source headers. See `driver/README.md` for the full
+provenance, safety case, and migration notes.

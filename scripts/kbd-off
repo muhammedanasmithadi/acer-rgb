@@ -1,6 +1,8 @@
 #!/bin/sh
 # Turn off keyboard backlight via daemon
-if [ -f "/run/kbd-rgbd/cmd" ]; then
-    printf 'profile off\n' > /run/kbd-rgbd/cmd 2>/dev/null
+set -eu
+if [ ! -f "/run/kbd-rgbd/cmd" ]; then
+    echo "error: daemon not running (no /run/kbd-rgbd/cmd)" >&2
+    exit 1
 fi
-exit 0
+printf 'profile off\n' > /run/kbd-rgbd/cmd

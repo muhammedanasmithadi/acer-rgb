@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_selector_parse() {
-        let json = r#"{"leds":[{"device_name":"platform:tuxedo_keyboard","function":"kbd_backlight","profile":"rainbow","mode":"Rgb"}]}"#;
+        let json = r#"{"leds":[{"device_name":"platform:acer_kbd_backlight","function":"kbd_backlight","profile":"rainbow","mode":"Rgb"}]}"#;
         let sel = parse_profile_selector(json).unwrap();
         assert_eq!(sel.leds.len(), 1);
         assert_eq!(sel.leds[0].profile, "rainbow");

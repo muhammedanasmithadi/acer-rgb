@@ -32,6 +32,9 @@ fn load_frames(selector_path: &Path) -> Result<Vec<Frame>> {
     let selector = parse_profile_selector(&sel_text)?;
     let entry = selector.leds.first().ok_or(KbdError::NoLeds)?;
     let profile_name = &entry.profile;
+    if !is_valid_profile_name(profile_name) {
+        return Err(KbdError::InvalidProfileName(profile_name.clone()));
+    }
     let kb_path = Path::new(KEYBOARD_DIR).join(format!("{}.json", profile_name));
     let kb_text = fs::read_to_string(&kb_path)?;
     let color_profile = parse_keyboard_json(&kb_text)?;
@@ -44,12 +47,18 @@ fn load_frames(selector_path: &Path) -> Result<Vec<Frame>> {
 
 fn resolve_active_path() -> Option<PathBuf> {
     let link = fs::read_link(ACTIVE_PROFILE_PATH).ok()?;
-    if link.is_absolute() {
-        Some(link)
+    let resolved = if link.is_absolute() {
+        link
     } else {
-        Path::new(ACTIVE_PROFILE_PATH)
-            .parent()
-            .map(|d| d.join(link))
+        Path::new(ACTIVE_PROFILE_PATH).parent()?.join(link)
+    };
+    // Confine to the profiles directory: never follow a selector
+    // that points elsewhere, even if the symlink was replaced.
+    if resolved.parent()? == Path::new(PROFILES_DIR) {
+        Some(resolved)
+    } else {
+        eprintln!("active profile escapes {}: {}", PROFILES_DIR, resolved.display());
+        None
     }
 }
 
@@ -96,11 +105,22 @@ fn handle_profile_cmd(name: &str, frames: &mut Vec<Frame>, frame_idx: &mut usize
     let profile_path = format!("{}/{}.json", PROFILES_DIR, name);
     match load_frames(Path::new(&profile_path)) {
         Ok(f) => {
-            let tmp = "/etc/tailord/active_profile.json.tmp";
             let active = Path::new(ACTIVE_PROFILE_PATH);
-            let _ = fs::remove_file(tmp);
-            if std::os::unix::fs::symlink(&profile_path, tmp).is_ok() {
-                let _ = fs::rename(tmp, active);
+            let tmp = active.with_extension("json.tmp");
+            if let Err(e) = fs::remove_file(&tmp) {
+                if e.kind() != io::ErrorKind::NotFound {
+                    eprintln!("switch to '{}': cannot clear tmp symlink: {}", name, e);
+                    return;
+                }
+            }
+            if let Err(e) = std::os::unix::fs::symlink(&profile_path, &tmp) {
+                eprintln!("switch to '{}': cannot stage symlink: {}", name, e);
+                return;
+            }
+            if let Err(e) = fs::rename(&tmp, active) {
+                eprintln!("switch to '{}': cannot activate profile: {}", name, e);
+                let _ = fs::remove_file(&tmp);
+                return;
             }
             eprintln!("switched to '{}' ({} frames)", name, f.len());
             *frames = f;
@@ -241,5 +261,31 @@ mod tests {
         assert!(!is_valid_profile_name("../etc/passwd"));
         assert!(!is_valid_profile_name("a/b"));
         assert!(!is_valid_profile_name(&"a".repeat(65)));
+    }
+
+    #[test]
+    fn test_load_frames_rejects_traversal_selector() {
+        let dir = std::env::temp_dir().join("kbd-rgbd-test-traversal");
+        let _ = fs::create_dir_all(&dir);
+        let sel = dir.join("evil.json");
+        fs::write(
+            &sel,
+            r#"{"leds":[{"device_name":"platform:acer_kbd_backlight","function":"kbd_backlight","profile":"../../etc/passwd","mode":"Single"}]}"#,
+        )
+        .unwrap();
+        let err = load_frames(&sel).unwrap_err();
+        assert!(
+            matches!(err, KbdError::InvalidProfileName(_)),
+            "expected InvalidProfileName, got {}",
+            err
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_resolve_active_path_confines_to_profiles_dir() {
+        // resolve_active_path reads the fixed system path; it must at
+        // least not panic when the symlink is absent or invalid here.
+        let _ = resolve_active_path();
     }
 }

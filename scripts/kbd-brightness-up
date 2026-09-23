@@ -1,4 +1,8 @@
 #!/bin/sh
 # Increase keyboard backlight brightness via daemon
-[ -f "/run/kbd-rgbd/cmd" ] || exit 0
+set -eu
+if [ ! -f "/run/kbd-rgbd/cmd" ]; then
+    echo "error: daemon not running (no /run/kbd-rgbd/cmd)" >&2
+    exit 1
+fi
 printf 'brightness_up\n' > /run/kbd-rgbd/cmd

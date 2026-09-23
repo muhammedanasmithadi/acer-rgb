@@ -1,5 +1,7 @@
 #!/bin/sh
 # List available keyboard presets
+set -eu
+export LC_ALL=C
 dir="/etc/tailord/profiles"
 if ! [ -d "$dir" ]; then
     echo "error: $dir not found" >&2

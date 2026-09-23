@@ -1,5 +1,7 @@
 #!/bin/sh
 # Cycle to the next keyboard preset
+set -eu
+export LC_ALL=C
 profiles_dir="/etc/tailord/profiles"
 active_link="/etc/tailord/active_profile.json"
 cmd_file="/run/kbd-rgbd/cmd"

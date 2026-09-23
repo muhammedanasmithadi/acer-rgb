@@ -17,8 +17,17 @@ rm -f /etc/systemd/system/kbd-rgbd.service
 rm -f /etc/systemd/system/tailord.service
 
 echo "Removing modprobe config..."
+rm -f /etc/modules-load.d/acer-kbd-backlight.conf
+rm -f /etc/modprobe.d/acer-kbd-backlight.conf
 rm -f /etc/modules-load.d/clevo-wmi.conf
+rm -f /etc/modules-load.d/tuxedo_keyboard.conf
 rm -f /etc/modprobe.d/tuxedo-keyboard.conf
+
+echo "Removing DKMS driver..."
+modprobe -r acer_kbd_backlight 2>/dev/null || true
+dkms remove acer-kbd-backlight/1.0.0 --all 2>/dev/null || true
+rm -rf /usr/src/acer-kbd-backlight-1.0.0
+depmod -a 2>/dev/null || true
 
 echo "Removing presets and config..."
 rm -rf /etc/tailord/keyboard
@@ -44,7 +53,3 @@ systemctl daemon-reload
 
 echo ""
 echo "Uninstallation complete."
-echo ""
-echo "Note: The DKMS patch was not reverted."
-echo "To revert: edit the module source or reinstall tuxedo-drivers."
-echo "  sudo dnf reinstall tuxedo-drivers"

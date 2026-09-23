@@ -11,7 +11,7 @@ Two Cargo deps: `serde` + `serde_json`. No D-Bus. No KDE.
 ## Data flow
 
 ```
-clevo_wmi + tuxedo_keyboard (kernel modules)
+acer_kbd_backlight (kernel module, driver/)
        ↓
 /sys/class/leds/rgb:kbd_backlight/multi_intensity
        ↓
@@ -52,12 +52,15 @@ Linear behavior.
 
 ```json
 { "leds": [{
-    "device_name": "platform:tuxedo_keyboard",
+    "device_name": "platform:acer_kbd_backlight",
     "function": "kbd_backlight",
     "profile": "<keyboard_profile_name>",
     "mode": "Rgb"
 }]}
 ```
+
+(`device_name`/`function`/`mode` are informational only; the daemon
+keys off `profile`.)
 
 `fans` and `performance_profile` removed from original tailord format.
 
@@ -124,8 +127,13 @@ as a fallback. `ExecStop` runs before SIGTERM. `TimeoutStopSec=2`.
 ## Error handling
 
 - **LED missing at start:** retry 5s, check `stop` during retry
-- **Profile parse fail:** log, keep last valid state
+- **Profile load fail:** log, keep last valid state; startup retries
+  every 5s until a valid active profile resolves
 - **Sysfs write fail:** retry 5× at 1s, reload profile on persistent failure
+- **Selector hardening:** `profile` names from both the cmd file and
+  selector JSONs are validated (`is_valid_profile_name`); the active
+  symlink is confined to `/etc/tailord/profiles`; symlink swaps are
+  staged through a `.tmp` link and errors abort the switch
 - **Brightness read fail:** fall back to `AtomicU32` in-memory last-known value
 - **Path traversal:** `is_valid_profile_name()` rejects non-alphanumeric chars
   (except `-`, `_`), max 64 chars

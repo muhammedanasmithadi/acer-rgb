@@ -1,7 +1,7 @@
 {
   "leds": [
     {
-      "device_name": "platform:tuxedo_keyboard",
+      "device_name": "platform:acer_kbd_backlight",
       "function": "kbd_backlight",
       "profile": "default",
       "mode": "Rgb"

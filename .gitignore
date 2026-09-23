@@ -1,1 +1,11 @@
 /target/
+
+# Kernel module build artifacts (driver/)
+*.o
+*.ko
+*.mod
+*.mod.c
+*.mod.o
+.*.cmd
+Module.symvers
+modules.order
