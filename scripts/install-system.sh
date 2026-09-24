@@ -60,7 +60,7 @@ install -m755 "$SCRIPT_DIR"/target/release/kbd-rgbd /usr/local/bin/kbd-rgbd
 
 # Install control scripts
 echo "  /usr/local/bin/kbd-*"
-for script in kbd-mode kbd-color; do
+for script in kbd-mode kbd-toggle kbd-color; do
   install -m755 "$SCRIPT_DIR/scripts/$script" "/usr/local/bin/$script"
 done
 

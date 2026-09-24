@@ -45,7 +45,7 @@ echo "Removing daemon..."
 rm -f /usr/local/bin/kbd-rgbd
 
 echo "Removing control scripts..."
-for script in kbd-mode kbd-color kbd-brightness-up kbd-brightness-down \
+for script in kbd-mode kbd-toggle kbd-color kbd-brightness-up kbd-brightness-down \
               kbd-preset-switch kbd-preset-list kbd-off kbdctl \
               kbd-brightness kbd-preset; do
   rm -f "/usr/local/bin/$script"
