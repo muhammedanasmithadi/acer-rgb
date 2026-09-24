@@ -1,7 +1,7 @@
 PREFIX ?= /usr/local
 DESTDIR ?=
 
-.PHONY: all build install uninstall patch-dkms
+.PHONY: all build install uninstall
 
 all: build
 
@@ -13,6 +13,3 @@ install:
 
 uninstall:
 	sudo ./scripts/uninstall.sh
-
-patch-dkms:
-	sudo ./scripts/apply-dmi-patch.sh
