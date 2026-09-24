@@ -1,0 +1,29 @@
+#!/bin/sh
+# Toggle keyboard backlight on/off, preserving the level.
+# Level state lives in the user cache dir, so no root is needed.
+set -eu
+LED=rgb:kbd_backlight
+STATE="${XDG_CACHE_HOME:-$HOME/.cache}/acer-rgb-kbd-brightness"
+
+command -v brightnessctl > /dev/null || {
+    echo "error: brightnessctl not found" >&2
+    exit 1
+}
+
+cur=$(brightnessctl -d "$LED" g)
+if [ "$cur" -gt 0 ]; then
+    mkdir -p "$(dirname "$STATE")"
+    printf '%s\n' "$cur" > "$STATE"
+    brightnessctl -d "$LED" s 0 > /dev/null
+    echo "off (saved $cur)"
+else
+    last=255
+    if [ -f "$STATE" ]; then
+        last=$(cat "$STATE" 2>/dev/null || echo 255)
+    fi
+    case "$last" in
+        ''|*[!0-9]*|0) last=255 ;;
+    esac
+    brightnessctl -d "$LED" s "$last" > /dev/null
+    echo "on ($last)"
+fi

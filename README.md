@@ -9,7 +9,8 @@ using a self-owned kernel driver — no external driver packages required.
 - Creates `/sys/class/leds/rgb:kbd_backlight/` LED class device
 - Runs `kbd-rgbd` — a dependency-free Rust daemon that renders one of
   5 built-in animations (or a static color) via sysfs
-- One config file (`/etc/acer-rgb.conf`), one control script (`kbd-mode`)
+- One config file (`/etc/acer-rgb.conf`), two control scripts
+  (`kbd-mode` for color/mode, `kbd-toggle` for on/off)
 - No D-Bus, no KDE dependencies, no Python, no JSON, no presets
 
 Brightness is owned by the Fn keys, which drive the LED `brightness`
@@ -47,8 +48,10 @@ kbd-mode off
 | Command | Description |
 |---------|-------------|
 | `kbd-mode <name>` | Animate: `rainbow`, `cycle`, `ocean`, `sunset`, `strobe` |
+| `kbd-mode next` | Rotate to the next animation (mode key) |
 | `kbd-mode RRGGBB` | Static color, e.g. `kbd-mode ff0000` |
 | `kbd-mode off` | Turn off backlight (daemon stays alive) |
+| `kbd-toggle` | Toggle on/off, preserving the level (brightness key) |
 | `kbd-color RRGGBB` | Low-level direct sysfs write (stop the daemon first) |
 
 The mode persists in `/etc/acer-rgb.conf` and survives reboots.
@@ -97,9 +100,11 @@ bind = $mod+KB, KB, exec, kbd-mode cycle
 ├── packaging/
 │   ├── kbd-rgbd.service        ← systemd service unit
 │   ├── modules-load.d/         ← kernel module auto-load
-│   └── modprobe.d/             ← module parameters
+│   ├── modprobe.d/             ← module parameters
+│   └── udev/                   ← LED access rule for the active session
 ├── scripts/
 │   ├── kbd-mode                ← set mode via daemon (applies + persists)
+│   ├── kbd-toggle              ← on/off toggle preserving level
 │   ├── kbd-color               ← direct sysfs static color (daemon stopped)
 │   ├── install-system.sh       ← system installation (incl. DKMS driver)
 │   ├── uninstall.sh            ← system removal (incl. DKMS driver)

@@ -1,13 +1,47 @@
 #!/bin/sh
 # Set the keyboard animation mode via the daemon (applies + persists).
-# Usage: kbd-mode <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB>
+# Usage: kbd-mode <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB|next>
 set -eu
-if [ "$#" -ne 1 ]; then
-    echo "usage: $0 <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB>" >&2
+MODES="rainbow cycle ocean sunset strobe off"
+CONF=/etc/acer-rgb.conf
+CMD_FILE=/run/kbd-rgbd/cmd
+
+usage() {
+    echo "usage: $0 <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB|next>" >&2
+    exit 1
+}
+
+[ "$#" -eq 1 ] || usage
+
+arg="$1"
+if [ "$arg" = "next" ]; then
+    current=""
+    if [ -f "$CONF" ]; then
+        current=$(sed -n 's/^mode=//p' "$CONF" 2>/dev/null | tail -n 1)
+    fi
+    # Rotate through the list; anything unknown (e.g. a static hex
+    # color) restarts at the first animation.
+    arg=""
+    found=""
+    # shellcheck disable=SC2086 -- intentional word splitting of the mode list
+    for m in $MODES; do
+        if [ -z "$arg" ] && [ -n "$found" ]; then
+            arg="$m"
+        fi
+        if [ "$m" = "$current" ]; then
+            found=1
+        fi
+    done
+    if [ -z "$arg" ]; then
+        # shellcheck disable=SC2086 -- intentional word splitting of the mode list
+        set -- $MODES
+        arg="$1"
+    fi
+fi
+
+if [ ! -f "$CMD_FILE" ]; then
+    echo "error: daemon not running (no $CMD_FILE)" >&2
     exit 1
 fi
-if [ ! -f "/run/kbd-rgbd/cmd" ]; then
-    echo "error: daemon not running (no /run/kbd-rgbd/cmd)" >&2
-    exit 1
-fi
-printf 'set %s\n' "$1" > /run/kbd-rgbd/cmd
+printf 'set %s\n' "$arg" > "$CMD_FILE"
+echo "$arg"

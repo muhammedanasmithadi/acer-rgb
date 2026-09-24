@@ -1,0 +1,3 @@
+# Let the active session control the Acer keyboard backlight LED
+# (brightness + color) without root.
+SUBSYSTEM=="leds", KERNEL=="rgb:kbd_backlight", TAG+="uaccess"

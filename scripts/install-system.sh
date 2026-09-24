@@ -88,6 +88,11 @@ install -m644 "$SCRIPT_DIR/packaging/modprobe.d/acer-kbd-backlight.conf" /etc/mo
 rm -f /etc/modules-load.d/clevo-wmi.conf /etc/modules-load.d/tuxedo_keyboard.conf
 rm -f /etc/modprobe.d/tuxedo-keyboard.conf
 
+# udev rule: active session may drive the backlight LED without root
+install -m644 "$SCRIPT_DIR/packaging/udev/90-acer-kbd-backlight.rules" /etc/udev/rules.d/90-acer-kbd-backlight.rules
+udevadm control --reload-rules 2>/dev/null || true
+udevadm trigger --subsystem-match=leds 2>/dev/null || true
+
 # Install the kernel driver via DKMS
 echo "  acer_kbd_backlight DKMS driver"
 DKMS_SRC=/usr/src/acer-kbd-backlight-1.0.0

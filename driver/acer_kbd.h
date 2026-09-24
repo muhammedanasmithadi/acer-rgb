@@ -149,17 +149,4 @@ void acer_kbd_leds_set_brightness(u8 brightness);
 void acer_kbd_leds_set_color(u32 color);
 void acer_kbd_leds_brightness_notify(void);
 
-/* Standard color table shared by the color-cycle key handler. */
-struct acer_kbd_color {
-	u32 code;
-	const char *name;
-};
-
-struct acer_kbd_color_list {
-	unsigned int size;
-	struct acer_kbd_color colors[];
-};
-
-extern struct acer_kbd_color_list acer_kbd_color_list;
-
 #endif /* ACER_KBD_H */

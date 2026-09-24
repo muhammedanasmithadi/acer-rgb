@@ -44,28 +44,12 @@ static struct key_entry acer_kbd_keymap[] = {
 	{ KE_END, 0 }
 };
 
-struct acer_kbd_color_list acer_kbd_color_list = {
-	.size = 8,
-	.colors = {
-		{ .name = "BLACK",   .code = 0x000000 },
-		{ .name = "RED",     .code = 0xFF0000 },
-		{ .name = "GREEN",   .code = 0x00FF00 },
-		{ .name = "BLUE",    .code = 0x0000FF },
-		{ .name = "YELLOW",  .code = 0xFFFF00 },
-		{ .name = "MAGENTA", .code = 0xFF00FF },
-		{ .name = "CYAN",    .code = 0x00FFFF },
-		{ .name = "WHITE",   .code = 0xFFFFFF },
-	},
-};
-
 static struct {
 	u8 has_mode;
 	u8 mode;
-	u8 whole_kbd_color;
 } kbd_state = {
 	.has_mode = 1,
 	.mode = 0,
-	.whole_kbd_color = 7,
 };
 
 static const struct {
@@ -82,20 +66,6 @@ static const struct {
 	{ 6, 0x90000000, "TEMPO" },
 	{ 7, 0xB0000000, "WAVE" },
 };
-
-static void set_next_color_whole_kb(void)
-{
-	u32 id = kbd_state.whole_kbd_color + 1;
-
-	if (id >= acer_kbd_color_list.size)
-		id = 1; /* skip black */
-
-	AKB_DEBUG("cycle color id %u code %X\n",
-		  id, acer_kbd_color_list.colors[id].code);
-
-	acer_kbd_leds_set_color(acer_kbd_color_list.colors[id].code);
-	kbd_state.whole_kbd_color = id;
-}
 
 static void set_kbd_backlight_mode(u8 mode)
 {
@@ -163,11 +133,6 @@ void acer_kbd_event(u32 event)
 	AKB_DEBUG("firmware event %#04x\n", event);
 
 	switch (event) {
-	case ACER_KBD_EVENT_CYCLE_MODE:
-		if (acer_kbd_leds_get_type() == ACER_KBD_BACKLIGHT_FIXED_COLOR)
-			break;
-		set_next_color_whole_kb();
-		break;
 	case ACER_KBD_EVENT_CYCLE_BRIGHTNESS:
 		acer_kbd_leds_brightness_notify();
 		break;

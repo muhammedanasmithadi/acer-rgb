@@ -23,6 +23,10 @@ rm -f /etc/modules-load.d/clevo-wmi.conf
 rm -f /etc/modules-load.d/tuxedo_keyboard.conf
 rm -f /etc/modprobe.d/tuxedo-keyboard.conf
 
+echo "Removing udev rule..."
+rm -f /etc/udev/rules.d/90-acer-kbd-backlight.rules
+udevadm control --reload-rules 2>/dev/null || true
+
 echo "Removing DKMS driver..."
 modprobe -r acer_kbd_backlight 2>/dev/null || true
 dkms remove acer-kbd-backlight/1.0.0 --all 2>/dev/null || true

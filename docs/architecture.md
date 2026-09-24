@@ -72,8 +72,14 @@ Two single-purpose scripts:
 
 | Script | Action |
 |--------|--------|
-| `kbd-mode` | Sends `set <value>` to the daemon (fails loudly if down) |
+| `kbd-mode` | Sends `set <value>` to the daemon; `next` rotates animations |
+| `kbd-toggle` | Toggles on/off via brightnessctl, preserving the level |
 | `kbd-color` | Direct sysfs static color; for daemon-free use and debugging |
+
+Ownership rule: the driver only *reports* Fn keys, the daemon owns
+color, the Fn layer owns brightness. The mode key (`0x83`) therefore
+does not change color in the kernel — it emits `KEY_LIGHTS_TOGGLE`,
+and Hyprland binds it to `kbd-mode next`.
 
 ## Service lifecycle
 
