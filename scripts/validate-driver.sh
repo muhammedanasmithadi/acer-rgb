@@ -65,7 +65,11 @@ echo "PASS: no kbd-rgbd errors in the last 2 minutes"
 pass=$((pass + 1))
 
 echo "== live backlight write =="
-BEFORE=$(cat "$LED/brightness")
+# Stop the animator first: it rewrites multi_intensity every frame,
+# which would race the roundtrip below. Restart is trap-guarded so a
+# failure cannot leave the daemon stopped.
+systemctl stop kbd-rgbd.service
+trap 'systemctl start kbd-rgbd.service > /dev/null 2>&1 || true' EXIT
 printf '255 255 255' > "$LED/multi_intensity"
 sleep 1
 AFTER_INTENSITY=$(cat "$LED/multi_intensity")
