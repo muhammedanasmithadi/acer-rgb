@@ -130,6 +130,10 @@ so user keybinds work without sudo):
 | `set <mode\|hex\|off>` | Apply immediately and persist to `/etc/acer-rgb.conf` |
 | `stop` | Write `0 0 0` to sysfs, exit (used by the systemd unit) |
 
+Writers must hold an `flock` on the cmd file across their write (see
+`kbd-mode`); the daemon locks across read+truncate, so commands can no
+longer be lost in between.
+
 ## Uninstall
 
 ```bash

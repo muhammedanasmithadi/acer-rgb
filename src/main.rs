@@ -20,7 +20,9 @@ use anim::{build, builtin, Frame, Key};
 
 use std::fs;
 use std::io::{self, Read};
+use std::os::raw::c_int;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::io::AsRawFd;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -28,6 +30,50 @@ const CONFIG_PATH: &str = "/etc/acer-rgb.conf";
 const CMD_PATH: &str = "/run/kbd-rgbd/cmd";
 const LED_PATH: &str = "/sys/class/leds/rgb:kbd_backlight/multi_intensity";
 const DEFAULT_MODE: &str = "cycle";
+/// Give up after this many consecutive failed writes (x 5 s each).
+const MAX_CONSECUTIVE_FAILURES: u32 = 60;
+
+extern "C" {
+    fn flock(fd: c_int, operation: c_int) -> c_int;
+}
+
+const LOCK_EX: c_int = 2;
+const LOCK_UN: c_int = 8;
+
+/// RAII exclusive `flock(2)` on a raw fd. Links libc directly, so no
+/// new crate is needed for file locking.
+struct FileLock {
+    fd: c_int,
+}
+
+impl FileLock {
+    /// Acquire an exclusive lock, retrying on EINTR.
+    ///
+    /// # Safety
+    /// `fd` must be a valid open file descriptor; constants match Linux.
+    fn exclusive(fd: c_int) -> io::Result<Self> {
+        loop {
+            // SAFETY: fd is open (caller-held `File` outlives the guard).
+            let rc = unsafe { flock(fd, LOCK_EX) };
+            if rc == 0 {
+                return Ok(Self { fd });
+            }
+            let err = io::Error::last_os_error();
+            if err.kind() != io::ErrorKind::Interrupted {
+                return Err(err);
+            }
+        }
+    }
+}
+
+impl Drop for FileLock {
+    fn drop(&mut self) {
+        // SAFETY: same fd as acquired; errors on unlock are not actionable.
+        unsafe {
+            flock(self.fd, LOCK_UN);
+        }
+    }
+}
 
 fn parse_hex(s: &str) -> Option<(u8, u8, u8)> {
     if s.len() != 6 || !s.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -89,6 +135,9 @@ fn read_command() -> Option<String> {
         .truncate(false)
         .open(CMD_PATH)
         .ok()?;
+    // Serialize against writers (they hold the same lock): a command
+    // landing between our read and truncate is no longer lost.
+    let _guard = FileLock::exclusive(f.as_raw_fd()).ok()?;
     let mut content = String::new();
     f.read_to_string(&mut content).ok()?;
     let _ = f.set_len(0);
@@ -122,6 +171,7 @@ fn run() {
         builtin(DEFAULT_MODE).expect("built-in default must resolve")
     });
     let mut idx = 0usize;
+    let mut failures = 0u32;
 
     loop {
         if let Some(cmd) = read_command() {
@@ -150,11 +200,19 @@ fn run() {
 
         let frame = &frames[idx];
         if let Err(e) = write_sysfs(frame) {
-            // LED device missing (driver not loaded yet): wait it out.
-            eprintln!("write error: {e}");
+            failures += 1;
+            eprintln!("write error: {e} ({failures}/{MAX_CONSECUTIVE_FAILURES})");
+            if failures >= MAX_CONSECUTIVE_FAILURES {
+                // LED gone for ~5 minutes: exit so systemd restarts us
+                // instead of logging forever. Clean `stop` above still
+                // exits 0 and does not trip the restart.
+                eprintln!("LED device missing, exiting for restart");
+                std::process::exit(1);
+            }
             sleep(Duration::from_secs(5));
             continue;
         }
+        failures = 0;
 
         idx = (idx + 1) % frames.len();
         sleep(Duration::from_millis(frame.duration_ms));
@@ -170,6 +228,38 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_file_lock_excludes_second_taker() {
+        let dir = std::env::temp_dir().join("kbd-rgbd-test-lock");
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("lock");
+        let f = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .unwrap();
+        let _guard = FileLock::exclusive(f.as_raw_fd()).unwrap();
+        // A second open must observe the lock (nonblocking take fails).
+        let f2 = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&path)
+            .unwrap();
+        const LOCK_NB: c_int = 4;
+        let denied = unsafe { flock(f2.as_raw_fd(), LOCK_EX | LOCK_NB) };
+        assert_eq!(denied, -1);
+        drop(_guard);
+        let acquired = unsafe { flock(f2.as_raw_fd(), LOCK_EX | LOCK_NB) };
+        assert_eq!(acquired, 0);
+        unsafe {
+            flock(f2.as_raw_fd(), LOCK_UN);
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn test_parse_hex() {

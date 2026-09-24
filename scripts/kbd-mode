@@ -47,5 +47,9 @@ if [ ! -f "$CMD_FILE" ]; then
     echo "error: daemon not running (no $CMD_FILE)" >&2
     exit 1
 fi
-printf 'set %s\n' "$arg" > "$CMD_FILE"
+# Serialize with the daemon (it locks across read+truncate). The pipe
+# avoids re-parsing the value in a subshell: printf arguments are never
+# re-evaluated, so arbitrary mode strings are injection-safe. tee's
+# write happens while flock holds the lock.
+printf 'set %s\n' "$arg" | flock "$CMD_FILE" tee "$CMD_FILE" > /dev/null
 echo "$arg"

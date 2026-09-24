@@ -102,14 +102,17 @@ their last color; the next start re-renders from config.
 
 ## Accepted risks (deliberate, single-user laptop scope)
 
-- **Cmd-file TOCTOU.** Read-then-truncate can drop a command that
-  lands in between. Accepted: commands are idempotent UI actions,
-  and a file lock would complicate all five writers for no real gain.
+- **Cmd-file TOCTOU: fixed with `flock`.** Writers (`kbd-mode`,
+  the unit's `ExecStop`) hold an exclusive lock across their write;
+  the daemon locks across read+truncate via a ~15-line libc FFI
+  (no new crates). A command can no longer be lost in between.
 - **0666 cmd file.** Any local user can change the backlight mode.
   Accepted by design (passwordless keybinds); documented in the README.
-- **No backoff on persistent sysfs failure.** One log line per 5 s,
-  forever. Bounded noise, and it is exactly what recovers the daemon
-  after driver (re)loads.
+- **No backoff on persistent sysfs failure: fixed with supervised
+  exit.** After ~5 minutes of continuous write failure the daemon
+  exits nonzero and the unit's `Restart=on-failure` (5 s) takes over:
+  same resilience, but a truly dead driver shows as a restart loop
+  instead of silent log spam. Clean `stop` still exits 0.
 
 ## History
 
