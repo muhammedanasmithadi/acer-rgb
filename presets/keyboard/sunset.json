@@ -1,9 +1,0 @@
-{
-  "Multiple": [
-    { "color": { "r": 255, "g": 80,  "b": 0   }, "transition": "Linear", "transition_time": 5000 },
-    { "color": { "r": 255, "g": 150, "b": 0   }, "transition": "Linear", "transition_time": 5000 },
-    { "color": { "r": 255, "g": 200, "b": 100 }, "transition": "Linear", "transition_time": 5000 },
-    { "color": { "r": 200, "g": 50,  "b": 100 }, "transition": "Linear", "transition_time": 5000 },
-    { "color": { "r": 150, "g": 0,   "b": 80  }, "transition": "Linear", "transition_time": 5000 }
-  ]
-}

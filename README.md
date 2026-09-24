@@ -7,35 +7,24 @@ using a self-owned kernel driver — no external driver packages required.
 
 - Loads the `acer_kbd_backlight` kernel module at boot (DKMS, `driver/`)
 - Creates `/sys/class/leds/rgb:kbd_backlight/` LED class device
-- Runs `kbd-rgbd` — a minimal Rust daemon that animates RGB colors via sysfs
-- Provides 11 preset color profiles and shell scripts to control them
-- No D-Bus, no KDE dependencies, no Python
+- Runs `kbd-rgbd` — a dependency-free Rust daemon that renders one of
+  5 built-in animations (or a static color) via sysfs
+- One config file (`/etc/acer-rgb.conf`), one control script (`kbd-mode`)
+- No D-Bus, no KDE dependencies, no Python, no JSON, no presets
+
+Brightness is owned by the Fn keys, which drive the LED `brightness`
+node directly via brightnessctl — the daemon never touches it.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  kbd-preset-switch               │
-│                  kbd-preset-list                 │
-│                  kbd-off                         │
-│                  kbd-brightness-up/down          │
-└───────┬─────────────────────────────┬────────────┘
-        │ write /run/kbd-rgbd/cmd      │ write /run/kbd-rgbd/cmd
-        ▼                              ▼
-┌────────────────┐           ┌──────────────────┐
-│   kbd-rgbd     │  reads    │  multi_intensity │
-│  (Rust daemon) │◄─────────►│  brightness      │
-│                │  writes   │  (LED class)     │
-└───┬───┬───┬────┘           └──────────────────┘
-    │   │   │
-    │   │   └── /etc/tailord/keyboard/*.json
-    │   │        (animation definitions)
-    │   │
-    │   └────── /etc/tailord/profiles/*.json
-    │            (profile selectors)
-    │
-    └────────── /etc/tailord/active_profile.json
-                 (symlink — atomically swapped)
+kbd-mode <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB>
+        │ write `set …` to /run/kbd-rgbd/cmd (persists to /etc/acer-rgb.conf)
+        ▼
+┌──────────────┐   writes   ┌──────────────────┐
+│   kbd-rgbd   │ ─────────► │  multi_intensity │
+│ (Rust daemon)│            │  (LED class)     │
+└──────────────┘            └──────────────────┘
 ```
 
 ## Quick start
@@ -48,65 +37,52 @@ sudo ./scripts/install-system.sh
 sudo ./scripts/validate-driver.sh
 
 # 3. Use it
-kbd-preset-list
-kbd-preset-switch
-kbd-brightness-up
-kbd-brightness-down
-kbd-off
+kbd-mode rainbow
+kbd-mode ff0000
+kbd-mode off
 ```
 
 ## Usage
 
 | Command | Description |
 |---------|-------------|
-| `kbd-brightness-up` | Increase brightness by ~10% |
-| `kbd-brightness-down` | Decrease brightness by ~10% |
-| `kbd-preset-switch` | Cycle to next preset |
-| `kbd-preset-list` | List all presets (active marked with `*`) |
-| `kbd-off` | Turn off backlight (daemon stays alive) |
+| `kbd-mode <name>` | Animate: `rainbow`, `cycle`, `ocean`, `sunset`, `strobe` |
+| `kbd-mode RRGGBB` | Static color, e.g. `kbd-mode ff0000` |
+| `kbd-mode off` | Turn off backlight (daemon stays alive) |
+| `kbd-color RRGGBB` | Low-level direct sysfs write (stop the daemon first) |
 
-Brightness and animations are independent — brightness scales the LED
-class output without affecting the daemon's RGB animation.
+The mode persists in `/etc/acer-rgb.conf` and survives reboots.
+Brightness stays where the Fn keys put it — animations only drive color.
 
 ### Hyprland keybinds example
 
-Add to `~/.config/hypr/hyprland.conf`:
+The Fn brightness keys are handled outside this repo (brightnessctl
+directly on the LED device, e.g. `~/.config/hypr/scripts/kbd-brightness.sh`).
+For mode switching, bind `kbd-mode`:
 
 ```
-bind = , XF86KbdBrightnessUp, exec, kbd-brightness-up
-bind = , XF86KbdBrightnessDown, exec, kbd-brightness-down
-bind = , XF86KbdLightOnOff, exec, kbd-off
-bind = $mod+KB, KB, exec, kbd-preset-switch
+bind = $mod+KB, KB, exec, kbd-mode cycle
 ```
 
-## Presets
+## Animations
 
 | Name | Description |
 |------|-------------|
 | `rainbow` | 6-color smooth rainbow, 4s per transition |
-| `cycle` | Red → Green → Blue, 6s each |
-| `default` | Red → Green → Blue, 6s each (active at install) |
-| `warm-ambient` | Slow warm-tone fades, 15s each |
-| `pastel` | Soft pastels, 5s each |
+| `cycle` | Red → Green → Blue, 6s each (default) |
 | `ocean` | Blue and teal tones, 6s each |
 | `sunset` | Orange, red, purple warm tones, 5s each |
-| `snap-cycle` | 6 colors instant snap, 500ms each |
 | `strobe` | White/black 100ms strobe |
-| `police` | Red/blue alternating, 300ms |
 | `off` | Turns backlight off |
+| `RRGGBB` | Any static color, e.g. `ff0000` |
 
 ## Files
 
 ```
 ├── src/
-│   ├── main.rs                 ← entrypoint: calls daemon::run()
-│   ├── lib.rs                  ← crate root + re-exports
-│   ├── error.rs                ← KbdError enum + From impls
-│   ├── types.rs                ← JSON types + parsers + 8 tests
-│   ├── animation.rs            ← lerp() + build_frames() + 2 tests
-│   └── runtime.rs              ← daemon runtime + 3 tests
-├── tests/
-│   └── profile_loading.rs      ← 2 integration tests
+│   ├── main.rs                 ← daemon: config, cmd file, sysfs loop + 2 tests
+│   └── anim.rs                 ← keyframe engine + 5 built-ins + 6 tests
+├── Cargo.toml                  ← zero dependencies
 ├── .github/workflows/ci.yml     ← CI: fmt, clippy, test, shellcheck, build
 ├── Cargo.toml
 ├── driver/                     ← acer_kbd_backlight kernel module (DKMS)
@@ -118,18 +94,13 @@ bind = $mod+KB, KB, exec, kbd-preset-switch
 │   ├── Kbuild + Makefile       ← kbuild files
 │   ├── dkms.conf               ← DKMS package definition
 │   └── README.md               ← driver design + safety case
-├── presets/keyboard/           ← animation JSON definitions (11)
-├── presets/profiles/           ← profile selectors (11)
 ├── packaging/
 │   ├── kbd-rgbd.service        ← systemd service unit
 │   ├── modules-load.d/         ← kernel module auto-load
 │   └── modprobe.d/             ← module parameters
 ├── scripts/
-│   ├── kbd-brightness-up       ← increase backlight
-│   ├── kbd-brightness-down     ← decrease backlight
-│   ├── kbd-preset-switch       ← cycle to next preset
-│   ├── kbd-preset-list         ← list presets
-│   ├── kbd-off                 ← turn off (daemon stays alive)
+│   ├── kbd-mode                ← set mode via daemon (applies + persists)
+│   ├── kbd-color               ← direct sysfs static color (daemon stopped)
 │   ├── install-system.sh       ← system installation (incl. DKMS driver)
 │   ├── uninstall.sh            ← system removal (incl. DKMS driver)
 │   └── validate-driver.sh      ← driver/stack health checks (needs root)
@@ -146,15 +117,13 @@ bind = $mod+KB, KB, exec, kbd-preset-switch
 
 ## Daemon commands
 
-Write to `/run/kbd-rgbd/cmd` (newline-terminated):
+Write to `/run/kbd-rgbd/cmd` (newline-terminated, world-writable by design
+so user keybinds work without sudo):
 
 | Command | Effect |
 |---------|--------|
-| `stop` | Write `0 0 0` to sysfs, exit |
-| `reload` | Reload current profile from disk |
-| `profile <name>` | Switch to profile (atomically updates symlink) |
-| `brightness_up` | Increase brightness by ~10% (+26, clamped 0–255) |
-| `brightness_down` | Decrease brightness by ~10% (-26, clamped 0–255) |
+| `set <mode\|hex\|off>` | Apply immediately and persist to `/etc/acer-rgb.conf` |
+| `stop` | Write `0 0 0` to sysfs, exit (used by the systemd unit) |
 
 ## Uninstall
 

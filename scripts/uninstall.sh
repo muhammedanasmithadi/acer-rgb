@@ -2,7 +2,7 @@
 # Remove kbd-rgbd system-wide installation
 # Requires root privileges
 
-set -e
+set -eu
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "This script must be run as root. Use: sudo $0"
@@ -29,23 +29,21 @@ dkms remove acer-kbd-backlight/1.0.0 --all 2>/dev/null || true
 rm -rf /usr/src/acer-kbd-backlight-1.0.0
 depmod -a 2>/dev/null || true
 
-echo "Removing presets and config..."
-rm -rf /etc/tailord/keyboard
-rm -rf /etc/tailord/profiles
-rm -rf /etc/tailord/fan
-rm -f /etc/tailord/active_profile.json
+echo "Removing config..."
+rm -f /etc/acer-rgb.conf
+rm -rf /etc/tailord
+rm -rf /run/kbd-rgbd
 
 echo "Removing old tailord binary..."
 rm -f /usr/bin/tailord
 
 echo "Removing daemon..."
 rm -f /usr/local/bin/kbd-rgbd
-rm -f /usr/local/bin/kbdctl
-rm -f /usr/local/bin/kbd-brightness
-rm -f /usr/local/bin/kbd-preset
 
 echo "Removing control scripts..."
-for script in kbd-brightness-up kbd-brightness-down kbd-preset-switch kbd-preset-list kbd-off; do
+for script in kbd-mode kbd-color kbd-brightness-up kbd-brightness-down \
+              kbd-preset-switch kbd-preset-list kbd-off kbdctl \
+              kbd-brightness kbd-preset; do
   rm -f "/usr/local/bin/$script"
 done
 

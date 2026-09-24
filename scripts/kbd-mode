@@ -1,0 +1,13 @@
+#!/bin/sh
+# Set the keyboard animation mode via the daemon (applies + persists).
+# Usage: kbd-mode <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB>
+set -eu
+if [ "$#" -ne 1 ]; then
+    echo "usage: $0 <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB>" >&2
+    exit 1
+fi
+if [ ! -f "/run/kbd-rgbd/cmd" ]; then
+    echo "error: daemon not running (no /run/kbd-rgbd/cmd)" >&2
+    exit 1
+fi
+printf 'set %s\n' "$1" > /run/kbd-rgbd/cmd

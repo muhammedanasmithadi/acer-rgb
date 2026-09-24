@@ -2,150 +2,101 @@
 
 ## Overview
 
-kbd-rgbd is a single-threaded Rust daemon that reads JSON color profiles,
-pre-computes animation frames, and writes RGB values to a kernel LED class
-device. Runtime control via a regular file at `/run/kbd-rgbd/cmd`.
+kbd-rgbd is a dependency-free Rust daemon that renders one keyboard
+backlight setting — a built-in animation, a static color, or off — to
+the kernel LED class device
+`/sys/class/leds/rgb:kbd_backlight/multi_intensity`.
 
-Two Cargo deps: `serde` + `serde_json`. No D-Bus. No KDE.
+Zero crates. No D-Bus. No JSON. No presets on disk: the 5 animations
+are compiled in (`src/anim.rs`).
+
+Brightness is out of scope by design. The Fn keys drive the LED
+`brightness` node directly via brightnessctl, which is the single
+source of truth for the level; the daemon only ever writes color.
 
 ## Data flow
 
 ```
-acer_kbd_backlight (kernel module, driver/)
-       ↓
-/sys/class/leds/rgb:kbd_backlight/multi_intensity
-       ↓
-kbd-rgbd (Rust daemon — reads JSON, writes RGB, cmd file IPC)
-       ↓
-kbd-brightness-up  kbd-brightness-down  kbd-preset-switch  kbd-off
+kbd-mode <name|hex|off>          kbd-color RRGGBB (daemon stopped)
+        │ write `set …`                   │ write sysfs directly
+        ▼                                 ▼
+┌──────────────┐   writes   ┌──────────────────┐
+│   kbd-rgbd   │ ─────────► │  multi_intensity │
+└──────────────┘            │  (LED class)     │
 ```
 
-## JSON types
+## Config
 
-### Keyboard animation (`/etc/tailord/keyboard/<name>.json`)
+Single file: `/etc/acer-rgb.conf`.
 
-Serde externally-tagged enum:
-
-```json
-{ "Single": { "r": 255, "g": 100, "b": 0 } }
+```ini
+# animation, static color, or off
+mode=cycle
 ```
 
-```json
-{
-  "Multiple": [
-    { "color": { "r": 255, "g": 0, "b": 0 },
-      "transition": "Linear", "transition_time": 4000 },
-    { "color": { "r": 0, "g": 255, "b": 0 },
-      "transition": "Linear", "transition_time": 4000 }
-  ]
-}
-```
-
-```json
-"None"
-```
-
-`Transition` is a typed enum (`Linear` / `None`). Absent field defaults to
-Linear behavior.
-
-### Profile selector (`/etc/tailord/profiles/<name>.json`)
-
-```json
-{ "leds": [{
-    "device_name": "platform:acer_kbd_backlight",
-    "function": "kbd_backlight",
-    "profile": "<keyboard_profile_name>",
-    "mode": "Rgb"
-}]}
-```
-
-(`device_name`/`function`/`mode` are informational only; the daemon
-keys off `profile`.)
-
-`fans` and `performance_profile` removed from original tailord format.
-
-### Active profile
-
-Symlink: `/etc/tailord/active_profile.json → profiles/<name>.json`
-
-Updated atomically via `.tmp` + `rename()`.
-
-## Frame computation
-
-| Profile type | Transition | Behavior |
-|-------------|-----------|----------|
-| `None` | — | Write `0 0 0`, sleep 1000ms |
-| `Single` | — | Write fixed color, sleep 1000ms |
-| `Multiple` | `Linear` | Interpolate `from→to` over N steps at 80ms each |
-| `Multiple` | `None` | Snap to target color, sleep `transition_time` ms |
-
-Interpolation: `lerp(a, b, t) = a + (b - a) * t`, per channel, clamped 0–255.
-Uses `0..=steps` (inclusive) to ensure `t=1.0` is reached for all transitions,
-including short ones where `steps=1`. Each segment produces `steps+1` frames;
-the endpoint duplicate at each boundary (~80ms at 12.5FPS) is visually
-negligible.
+Accepted values: `rainbow`, `cycle`, `ocean`, `sunset`, `strobe`,
+`off`, or a hex color (`ff0000`). Unknown values are logged and
+ignored; a missing or invalid config falls back to `cycle`.
 
 ## Cmd file protocol
 
-Regular file at `/run/kbd-rgbd/cmd` (world-writable, mode 666).
+Regular file at `/run/kbd-rgbd/cmd` (world-writable, mode 666, so user
+keybinds work without sudo).
 
 | Command | Effect |
 |---------|--------|
+| `set <value>` | Validate, apply immediately, persist to `/etc/acer-rgb.conf` |
 | `stop` | Write `0 0 0` to sysfs, exit |
-| `reload` | Re-read active profile |
-| `profile <name>` | Switch to preset |
-| `brightness_up` | +26 brightness (clamped 0–255) |
-| `brightness_down` | -26 brightness (clamped 0–255) |
 
-Daemon reads with `OpenOptions::new().read(true).write(true).create(true)`,
-truncates with `set_len(0)` after each read.
+The daemon reads the whole file, then truncates it. Invalid values are
+logged and ignored; the previous mode keeps rendering.
+
+## Animations
+
+Keyframe lists expanded to 80 ms frames with linear interpolation
+(`src/anim.rs::build`), wrapping end-to-start:
+
+| Name | Keys |
+|------|------|
+| `rainbow` | 6 colors, 4 s each |
+| `cycle` | red → green → blue, 6 s each |
+| `ocean` | 5 blue/teal keys, 6 s each |
+| `sunset` | 5 warm keys, 5 s each |
+| `strobe` | white/black snap, 100 ms each |
+| `off` | single black frame |
+| `RRGGBB` | single static frame, 1 s cadence |
 
 ## Shell scripts
 
-5 single-purpose scripts, no argument parsing:
+Two single-purpose scripts:
 
 | Script | Action |
 |--------|--------|
-| `kbd-brightness-up` | Writes `brightness_up` to cmd file |
-| `kbd-brightness-down` | Writes `brightness_down` to cmd file |
-| `kbd-preset-switch` | Cycles to next profile (sorted, wraps) |
-| `kbd-preset-list` | Lists profiles with `* (active)` marker |
-| `kbd-off` | Writes `profile off` to cmd file (daemon stays alive) |
+| `kbd-mode` | Sends `set <value>` to the daemon (fails loudly if down) |
+| `kbd-color` | Direct sysfs static color; for daemon-free use and debugging |
 
 ## Service lifecycle
 
 ```
-systemctl start  → RuntimeDirectory created → daemon starts → loops forever
-systemctl stop   → ExecStop (writes "stop" to cmd) → daemon writes 0 0 0 → exits
-systemctl kill   → SIGTERM → daemon dies (LEDs stay at last color)
+systemctl start → RuntimeDirectory created → daemon starts → renders loop
+systemctl stop  → ExecStop (writes "stop" to cmd) → daemon writes 0 0 0 → exits
 ```
 
-`RuntimeDirectory=kbd-rgbd` (systemd v240+) creates `/run/kbd-rgbd` before
-`ExecStart`. Daemon creates the cmd file and sets 0666 permissions on startup
-as a fallback. `ExecStop` runs before SIGTERM. `TimeoutStopSec=2`.
+`TimeoutStopSec=2`. Like its predecessor, a SIGKILL leaves the LEDs at
+their last color; the next start re-renders from config.
 
 ## Error handling
 
-- **LED missing at start:** retry 5s, check `stop` during retry
-- **Profile load fail:** log, keep last valid state; startup retries
-  every 5s until a valid active profile resolves
-- **Sysfs write fail:** retry 5× at 1s, reload profile on persistent failure
-- **Selector hardening:** `profile` names from both the cmd file and
-  selector JSONs are validated (`is_valid_profile_name`); the active
-  symlink is confined to `/etc/tailord/profiles`; symlink swaps are
-  staged through a `.tmp` link and errors abort the switch
-- **Brightness read fail:** fall back to `AtomicU32` in-memory last-known value
-- **Path traversal:** `is_valid_profile_name()` rejects non-alphanumeric chars
-  (except `-`, `_`), max 64 chars
+- **Bad config/cmd value:** log, keep rendering the current mode.
+- **LED missing (driver not loaded):** log once per 5 s, keep retrying —
+  this is the normal state during early boot before DKMS autoload.
+- **Config not persistable:** log, mode still applies in memory.
 
-## Key differences from tailord
+## History
 
-| Feature | tailord | kbd-rgbd |
-|---------|---------|----------|
-| Dependencies | ~100 crates | 2 (serde + serde_json) |
-| IPC | D-Bus | Regular file |
-| Brightness | PowerDevil D-Bus | Daemon writes sysfs directly |
-| Profile switching | tailord D-Bus method | `profile <name>` cmd |
-| Binary size | ~4MB+ | ~356KB stripped |
-| Runtime deps | D-Bus, KDE, Python | libc only |
-| Error type | — | `KbdError` with `From<io::Error>` + `From<serde_json::Error>` |
+v0.1.x drove animations from JSON presets under `/etc/tailord` with a
+6-command protocol and daemon-side brightness (serde + serde_json,
+~1000 lines with tests). The firmware cannot animate on its own, so a
+renderer is still needed — but presets, selectors, symlinks, and the
+brightness duplication were removed (see git history). Net: ~350 lines,
+zero dependencies.

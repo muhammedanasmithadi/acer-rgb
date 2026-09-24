@@ -1,8 +1,9 @@
 #!/bin/sh
-# Install kbd-rgbd system-wide: daemon, scripts, presets, systemd unit
-# Requires root privileges
+# Install kbd-rgbd system-wide: daemon, scripts, config, systemd unit,
+# and the acer_kbd_backlight DKMS driver.
+# Requires root privileges.
 
-set -e
+set -eu
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "This script must be run as root. Use: sudo $0"
@@ -31,9 +32,9 @@ if ! command -v cargo > /dev/null 2>&1 && [ -n "${SUDO_USER:-}" ]; then
     fi
     unset SUDO_HOME
 fi
-for tool in cargo dkms depmod modprobe; do
+for tool in cargo dkms depmod modprobe systemctl install; do
     command -v "$tool" > /dev/null || {
-        echo "missing required tool: $tool (hint: sudo dnf install dkms)" >&2
+        echo "missing required tool: $tool" >&2
         exit 1
     }
 done
@@ -48,6 +49,10 @@ echo "Installing from: $SCRIPT_DIR"
 # Build the Rust binary
 echo "  building kbd-rgbd..."
 (cd "$SCRIPT_DIR" && cargo build --release)
+# Leave the build cache owned by the invoking user, if any
+if [ -n "${SUDO_USER:-}" ]; then
+    chown -R "$SUDO_USER" "$SCRIPT_DIR/target" 2>/dev/null || true
+fi
 
 # Install daemon binary
 echo "  /usr/local/bin/kbd-rgbd"
@@ -55,18 +60,24 @@ install -m755 "$SCRIPT_DIR"/target/release/kbd-rgbd /usr/local/bin/kbd-rgbd
 
 # Install control scripts
 echo "  /usr/local/bin/kbd-*"
-for script in kbd-brightness-up kbd-brightness-down kbd-preset-switch kbd-preset-list kbd-off; do
+for script in kbd-mode kbd-color; do
   install -m755 "$SCRIPT_DIR/scripts/$script" "/usr/local/bin/$script"
 done
 
-# Remove old kbdctl
-rm -f /usr/local/bin/kbdctl /usr/local/bin/kbd-brightness /usr/local/bin/kbd-preset
+# Remove superseded scripts from earlier revisions
+for script in kbd-brightness-up kbd-brightness-down kbd-preset-switch \
+              kbd-preset-list kbd-off kbdctl kbd-brightness kbd-preset; do
+  rm -f "/usr/local/bin/$script"
+done
 
-# Copy presets
-echo "  presets/  -> /etc/tailord/"
-install -d -m755 /etc/tailord/keyboard /etc/tailord/profiles
-cp -a "$SCRIPT_DIR/presets/keyboard/"*.json /etc/tailord/keyboard/
-install -m644 "$SCRIPT_DIR/presets/profiles/"*.json /etc/tailord/profiles/
+# Default daemon config (preserve an existing one)
+echo "  /etc/acer-rgb.conf"
+if [ ! -f /etc/acer-rgb.conf ]; then
+  printf '# kbd-rgbd mode: rainbow|cycle|ocean|sunset|strobe|off|RRGGBB\nmode=cycle\n' > /etc/acer-rgb.conf
+  chmod 644 /etc/acer-rgb.conf
+fi
+# Remove superseded preset tree, if any
+rm -rf /etc/tailord
 
 # Copy modprobe configs
 echo "  modprobe configs"
@@ -79,9 +90,6 @@ rm -f /etc/modprobe.d/tuxedo-keyboard.conf
 
 # Install the kernel driver via DKMS
 echo "  acer_kbd_backlight DKMS driver"
-for tool in dkms depmod modprobe; do
-    command -v "$tool" > /dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
-done
 DKMS_SRC=/usr/src/acer-kbd-backlight-1.0.0
 rm -rf "$DKMS_SRC"
 cp -r "$SCRIPT_DIR/driver" "$DKMS_SRC"
@@ -95,23 +103,17 @@ modprobe acer_kbd_backlight
 echo "  kbd-rgbd.service"
 install -m644 "$SCRIPT_DIR/packaging/kbd-rgbd.service" /etc/systemd/system/kbd-rgbd.service
 
-# Ensure active symlink exists (default to cycle if not set)
-if [ ! -L /etc/tailord/active_profile.json ]; then
-  ln -sf /etc/tailord/profiles/cycle.json /etc/tailord/active_profile.json
-fi
-
 # Remove old tailord service, enable new one
 systemctl daemon-reload
 systemctl disable --now tailord.service 2>/dev/null || true
 rm -f /etc/systemd/system/tailord.service
-systemctl enable --now kbd-rgbd.service 2>/dev/null || true
+systemctl enable --now kbd-rgbd.service
 
 echo ""
 echo "Installation complete."
 echo "  - acer_kbd_backlight driver installed via DKMS and loaded"
-echo "  - kbd-rgbd.service is enabled and started"
-echo "  - kbd-brightness-up, kbd-brightness-down, kbd-preset-switch,"
-echo "    kbd-preset-list, kbd-off available in /usr/local/bin/"
+echo "  - kbd-rgbd.service is enabled and started (mode from /etc/acer-rgb.conf)"
+echo "  - kbd-mode, kbd-color available in /usr/local/bin/"
 echo ""
 echo "Verify:"
 echo "  ls /sys/class/leds/ | grep kbd_backlight"

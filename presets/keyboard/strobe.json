@@ -1,6 +1,0 @@
-{
-  "Multiple": [
-    { "color": { "r": 255, "g": 255, "b": 255 }, "transition": "None", "transition_time": 100 },
-    { "color": { "r": 0,   "g": 0,   "b": 0   }, "transition": "None", "transition_time": 100 }
-  ]
-}
