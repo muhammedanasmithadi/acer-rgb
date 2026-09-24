@@ -28,7 +28,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y gcc make linux-headers-generic
           echo "running kernel: $(uname -r)"
-          ls -d /lib/modules/*/build /usr/src/linux-headers-* 2>/dev/null || true
-          cd driver && make
+          KDIR=$(ls -d /usr/src/linux-headers-*-generic/ 2>/dev/null | sort -V | tail -n 1)
+          echo "KDIR=$KDIR"
+          cd driver && make "KDIR=$KDIR"
       - name: Build release
         run: cargo build --release
