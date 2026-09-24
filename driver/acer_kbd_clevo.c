@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/mutex.h>
+#include <linux/version.h>
 
 #include "acer_kbd.h"
 
@@ -45,10 +46,8 @@ static struct key_entry acer_kbd_keymap[] = {
 };
 
 static struct {
-	u8 has_mode;
 	u8 mode;
 } kbd_state = {
-	.has_mode = 1,
 	.mode = 0,
 };
 
@@ -217,13 +216,20 @@ static int acer_kbd_probe(struct platform_device *dev)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
+static int acer_kbd_remove(struct platform_device *dev)
+#else
 static void acer_kbd_remove(struct platform_device *dev)
+#endif
 {
 	if (mode_attr_created) {
 		device_remove_file(&dev->dev, &dev_attr_kbd_backlight_mode);
 		mode_attr_created = false;
 	}
 	acer_kbd_leds_remove(dev);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
+	return 0;
+#endif
 }
 
 static int acer_kbd_suspend(struct platform_device *dev, pm_message_t state)

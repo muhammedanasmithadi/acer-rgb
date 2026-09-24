@@ -113,8 +113,9 @@ sudo rm -f /etc/modules-load.d/clevo-wmi.conf \
 - `AUTOINSTALL=yes`: kernel updates rebuild automatically from
   `/usr/src/acer-kbd-backlight-1.0.0`. Re-copy on driver updates.
 - Kernel API used (`wmi_driver`, `led_class_multicolor`,
-  `sparse_keymap`, `platform_create_bundle`) is stable; minimum
-  target is 6.11 (void `remove` callback). Re-check on major
-  kernel releases by rebuilding.
+  `sparse_keymap`, `platform_create_bundle`) is stable across 6.x/7.x;
+  a compat guard covers the pre-6.11 `remove()` signature. CI
+  compile-checks the driver on every push; behavior still validates
+  on hardware.
 - `force=1` exists for bringing up other Acer models; promote a
   model to the allowlist only after the full checklist passes on it.

@@ -96,6 +96,7 @@ udevadm trigger --subsystem-match=leds 2>/dev/null || true
 # Install the kernel driver via DKMS
 echo "  acer_kbd_backlight DKMS driver"
 DKMS_SRC=/usr/src/acer-kbd-backlight-1.0.0
+(cd "$SCRIPT_DIR/driver" && make clean > /dev/null 2>&1) || true
 rm -rf "$DKMS_SRC"
 cp -r "$SCRIPT_DIR/driver" "$DKMS_SRC"
 dkms remove acer-kbd-backlight/1.0.0 --all 2>/dev/null || true

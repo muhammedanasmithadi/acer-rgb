@@ -97,6 +97,19 @@ their last color; the next start re-renders from config.
 - **LED missing (driver not loaded):** log once per 5 s, keep retrying —
   this is the normal state during early boot before DKMS autoload.
 - **Config not persistable:** log, mode still applies in memory.
+  (Running the binary by hand as non-root hits this; the service
+  runs as root.)
+
+## Accepted risks (deliberate, single-user laptop scope)
+
+- **Cmd-file TOCTOU.** Read-then-truncate can drop a command that
+  lands in between. Accepted: commands are idempotent UI actions,
+  and a file lock would complicate all five writers for no real gain.
+- **0666 cmd file.** Any local user can change the backlight mode.
+  Accepted by design (passwordless keybinds); documented in the README.
+- **No backoff on persistent sysfs failure.** One log line per 5 s,
+  forever. Bounded noise, and it is exactly what recovers the daemon
+  after driver (re)loads.
 
 ## History
 

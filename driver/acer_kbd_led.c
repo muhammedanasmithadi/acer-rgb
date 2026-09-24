@@ -212,7 +212,8 @@ int acer_kbd_leds_init(struct platform_device *dev)
 	for (i = 0; i < 3; ++i) {
 		status = acer_kbd_evaluate2(ACER_KBD_CMD_GET_SPECS, 0, &result);
 		if (!status) {
-			if (result->type == ACPI_TYPE_BUFFER) {
+			if (result->type == ACPI_TYPE_BUFFER &&
+			    result->buffer.length > 0x0f) {
 				AKB_DEBUG("GET_SPECS byte[0x0f]: 0x%02x\n",
 					  result->buffer.pointer[0x0f]);
 				acer_kbd_backlight_type = result->buffer.pointer[0x0f];
@@ -236,7 +237,7 @@ int acer_kbd_leds_init(struct platform_device *dev)
 				AKB_DEBUG("backlight type 0x00 looks wrong, retrying\n");
 				msleep(50);
 			} else {
-				AKB_ERROR("GET_SPECS returned wrong type, trying FEATURES_1\n");
+				AKB_ERROR("GET_SPECS failed, missing, wrong type, or too short; trying FEATURES_1\n");
 				status = -EINVAL;
 			}
 			ACPI_FREE(result);

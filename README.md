@@ -52,7 +52,7 @@ kbd-mode off
 | `kbd-mode RRGGBB` | Static color, e.g. `kbd-mode ff0000` |
 | `kbd-mode off` | Turn off backlight (daemon stays alive) |
 | `kbd-toggle` | Toggle on/off, preserving the level (brightness key) |
-| `kbd-color RRGGBB` | Low-level direct sysfs write (stop the daemon first) |
+| `kbd-color RRGGBB` | Low-level direct sysfs write (stop the daemon first; needs the installed udev rule for unprivileged writes) |
 
 The mode persists in `/etc/acer-rgb.conf` and survives reboots.
 Brightness stays where the Fn keys put it — animations only drive color.
