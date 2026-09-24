@@ -25,7 +25,8 @@ if [ "$arg" = "next" ]; then
     # color) restarts at the first animation.
     arg=""
     found=""
-    # shellcheck disable=SC2086 -- intentional word splitting of the mode list
+    # shellcheck disable=SC2086
+    # (intentional word splitting of the mode list)
     for m in $MODES; do
         if [ -z "$arg" ] && [ -n "$found" ]; then
             arg="$m"
@@ -35,7 +36,8 @@ if [ "$arg" = "next" ]; then
         fi
     done
     if [ -z "$arg" ]; then
-        # shellcheck disable=SC2086 -- intentional word splitting of the mode list
+        # shellcheck disable=SC2086
+        # (intentional word splitting of the mode list)
         set -- $MODES
         arg="$1"
     fi

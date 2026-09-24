@@ -38,8 +38,13 @@ check_value() {
 }
 
 echo "== kernel module =="
-lsmod | grep -q "^acer_kbd_backlight " && echo "PASS: acer_kbd_backlight loaded" && pass=$((pass + 1)) \
-    || { echo "FAIL: acer_kbd_backlight not loaded"; exit 1; }
+if lsmod | grep -q "^acer_kbd_backlight "; then
+    echo "PASS: acer_kbd_backlight loaded"
+    pass=$((pass + 1))
+else
+    echo "FAIL: acer_kbd_backlight not loaded"
+    exit 1
+fi
 if lsmod | grep -Eq "^(tuxedo_keyboard|clevo_wmi|uniwill_wmi|clevo_acpi|tuxedo_io|tuxedo_nb|ite_829)[[:space:]]"; then
     echo "FAIL: stale tuxedo/clevo modules still loaded"
     exit 1
@@ -73,9 +78,13 @@ trap 'systemctl start kbd-rgbd.service > /dev/null 2>&1 || true' EXIT
 printf '255 255 255' > "$LED/multi_intensity"
 sleep 1
 AFTER_INTENSITY=$(cat "$LED/multi_intensity")
-printf '%s' "$AFTER_INTENSITY" | grep -q "255 255 255" \
-    && echo "PASS: sysfs write/read roundtrip ($AFTER_INTENSITY)" && pass=$((pass + 1)) \
-    || { echo "FAIL: sysfs roundtrip mismatch ($AFTER_INTENSITY)"; exit 1; }
+if printf '%s' "$AFTER_INTENSITY" | grep -q "255 255 255"; then
+    echo "PASS: sysfs write/read roundtrip ($AFTER_INTENSITY)"
+    pass=$((pass + 1))
+else
+    echo "FAIL: sysfs roundtrip mismatch ($AFTER_INTENSITY)"
+    exit 1
+fi
 
 echo "== DKMS registration =="
 check "dkms knows acer-kbd-backlight" dkms status -m acer-kbd-backlight -v 1.0.0
