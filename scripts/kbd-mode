@@ -1,13 +1,15 @@
 #!/bin/sh
 # Set the keyboard animation mode via the daemon (applies + persists).
 # Usage: kbd-mode <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB|next>
+# 'next' rotates through the animations only; 'off' is intentionally
+# excluded (on/off belongs to the toggle key, not the mode cycle).
 set -eu
-MODES="rainbow cycle ocean sunset strobe off"
+MODES="rainbow cycle ocean sunset strobe"
 CONF=/etc/acer-rgb.conf
 CMD_FILE=/run/kbd-rgbd/cmd
 
 usage() {
-    echo "usage: $0 <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB|next>" >&2
+    echo "usage: $0 <rainbow|cycle|ocean|sunset|strobe|off|RRGGBB|next>  (next skips off)" >&2
     exit 1
 }
 
