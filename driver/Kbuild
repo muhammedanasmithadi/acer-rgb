@@ -3,4 +3,8 @@ obj-m += acer_kbd_backlight.o
 acer_kbd_backlight-objs += acer_kbd_core.o acer_kbd_wmi.o
 acer_kbd_backlight-objs += acer_kbd_clevo.o acer_kbd_led.o
 
-ccflags-y += -Wall -Wextra -Werror=implicit-function-declaration
+# Keep diagnostics strict but portable: Ubuntu enables CONFIG_WERROR,
+# which turns any -Wextra warning on foreign gcc/header combos into a
+# hard error, so -Wextra stays off. Implicit declarations are always
+# real bugs, hence -Werror for those.
+ccflags-y += -Werror=implicit-function-declaration
