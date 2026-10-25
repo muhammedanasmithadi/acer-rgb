@@ -1,4 +1,4 @@
-# acer-kbd-backlight — self-owned keyboard backlight driver
+# acer-kbd-backlight - self-owned keyboard backlight driver
 
 Single-module kernel driver (`acer_kbd_backlight.ko`) for the keyboard
 backlight on Acer laptops exposing the `ABBC0F6x` WMI GUIDs. Verified on
@@ -16,7 +16,7 @@ pulling in all of `tuxedo-drivers` means:
 
 - a DMI whitelist that rejects non-TUXEDO hardware (needed patching),
 - battery charge-control code that performs a probe-time EC **write**
-  to detect its feature — unsafe on foreign firmware,
+  to detect its feature - unsafe on foreign firmware,
 - fan / webcam / touchpad / flightmode / performance-profile commands
   for hardware this machine does not have,
 - Uniwill / Clevo-ACPI transports that can never bind here.
@@ -33,8 +33,8 @@ This fork keeps the keyboard-backlight path and deletes the rest.
 | `clevo_keyboard.h` (1139) | `acer_kbd_clevo.c` | Command layer, keymap, modes; flexicharger (~460 lines), Fn-lock, CC-combo, Clevo-only workarounds dropped |
 | `clevo_leds.h` (554) | `acer_kbd_led.c` | LED devices, detection, suspend/resume; dead code, TODOs, quirks dropped |
 | `clevo_interfaces.h` (103) | `acer_kbd.h` | GUIDs + keyboard-scoped commands only |
-| `tuxedo_compatibility_check/` | — | Replaced by a built-in Acer allowlist + `force` param |
-| `uniwill_*`, `clevo_acpi.c`, `ite_8291*`, `tuxedo_nb*`, `tuxedo_io`, … | — | Not needed; never loaded on this machine |
+| `tuxedo_compatibility_check/` | - | Replaced by a built-in Acer allowlist + `force` param |
+| `uniwill_*`, `clevo_acpi.c`, `ite_8291*`, `tuxedo_nb*`, `tuxedo_io`, … | - | Not needed; never loaded on this machine |
 
 Net: ~2500 lines upstream → ~1300 here, one module, zero
 inter-module symbols.
@@ -58,7 +58,7 @@ inter-module symbols.
    so this fork complies.
 5. **Secure Boot.** Currently disabled on this machine; DKMS builds
    load without signing. If Secure Boot is ever enabled, enroll a
-   MOK and sign — same workflow as `acer-ec`.
+   MOK and sign - same workflow as `acer-ec`.
 
 ## Userspace contract (unchanged from tuxedo_keyboard)
 
